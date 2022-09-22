@@ -1,6 +1,7 @@
 use tracing::{error, info, warn};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
+use wgpu::include_wgsl;
 use winit::{
     event::*,
     event_loop::{ControlFlow, EventLoop},
@@ -13,6 +14,7 @@ struct State {
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
     size: winit::dpi::PhysicalSize<u32>,
+    render_pipeline: wgpu::RenderPipeline,
 }
 
 impl State {
@@ -55,6 +57,7 @@ impl State {
         dbg!(adapter.features());
         dbg!(device.features());
 
+
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: surface.get_supported_formats(&adapter)[0],
@@ -68,12 +71,57 @@ impl State {
         dbg!(modes);
 
         surface.configure(&device, &config);
+
+        let shader = device.create_shader_module(include_wgsl!("shader.wgsl"));
+        let render_pipeline_layout = device
+            .create_pipeline_layout(
+                &wgpu::PipelineLayoutDescriptor {
+                    label: Some("Render Pipeline Layout"),
+                    bind_group_layouts: &[],
+                    push_constant_ranges: &[],
+                });
+        let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("Render Pipeline"),
+            layout: Some(&render_pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: "vs_main",
+                buffers: &[],
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: "fs_main",
+                targets: &[Some(wgpu::ColorTargetState { // @location(0) in .wgsl file
+                    format: config.format,
+                    blend: Some(wgpu::BlendState::REPLACE),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList, // how are indicies to be interpreted
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: Some(wgpu::Face::Back),
+                unclipped_depth: false,
+                polygon_mode: wgpu::PolygonMode::Fill,
+                conservative: false,
+            },
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState {
+                count: 1,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
+            },
+            multiview: None,
+        });
+
         Self {
             surface,
             device,
             queue,
             config,
             size,
+            render_pipeline,
         }
     }
 
@@ -86,7 +134,7 @@ impl State {
         }
     }
 
-    fn input(&mut self, event: &WindowEvent) -> bool {
+    fn input(&mut self, _event: &WindowEvent) -> bool {
         false
     }
 
@@ -103,23 +151,27 @@ impl State {
                 label: Some("Render Encoder"),
             });
         {
-            let _render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            let clear_color = wgpu::Color {
+                r: 0.1,
+                g: 0.2,
+                b: 0.3,
+                a: 1.0,
+            };
+            let color_attachment = wgpu::RenderPassColorAttachment {
+                view: &view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(clear_color),
+                    store: true,
+                },
+            };
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Render Pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.1,
-                            g: 0.2,
-                            b: 0.3,
-                            a: 1.0,
-                        }),
-                        store: true,
-                    },
-                })],
+                color_attachments: &[Some(color_attachment)],
                 depth_stencil_attachment: None,
             });
+            render_pass.set_pipeline(&self.render_pipeline);
+            render_pass.draw(0..3, 0..1);
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));
