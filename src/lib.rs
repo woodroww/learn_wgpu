@@ -215,13 +215,12 @@ impl State {
             .await
             .unwrap();
 
-
         // list available features for your device
         // https://docs.rs/wgpu/latest/wgpu/struct.Features.html
         //dbg!(adapter.features());
         //dbg!(device.features());
 
-/*
+        /*
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Vertex Buffer"),
             contents: bytemuck::cast_slice(VERTICES),
@@ -426,8 +425,8 @@ impl State {
             config,
             size,
             render_pipeline,
-      //      vertex_buffer,
-        //    index_buffer,
+            //      vertex_buffer,
+            //    index_buffer,
             //num_indicies,
             diffuse_bind_group,
             //diffuse_texture,
@@ -507,15 +506,17 @@ impl State {
                 }),
             });
 
+            use model::DrawModel;
             render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
             render_pass.set_pipeline(&self.render_pipeline);
+            render_pass.draw_model_instanced(
+                &self.obj_model,
+                0..self.instances.len() as u32,
+                &self.camera_bind_group,
+            );
+            /*
             render_pass.set_bind_group(0, &self.diffuse_bind_group, &[]);
             render_pass.set_bind_group(1, &self.camera_bind_group, &[]);
-
-            use model::DrawModel;
-            render_pass
-                .draw_mesh_instanced(&self.obj_model.meshes[0], 0..self.instances.len() as u32);
-            /*
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
             render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
             render_pass.draw_indexed(0..self.num_indicies, 0, 0..self.instances.len() as _);
