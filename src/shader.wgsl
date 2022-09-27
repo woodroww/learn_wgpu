@@ -40,12 +40,40 @@ fn vs_main(
 	return out;
 }
 
+// fragment shader
+
 @group(0) @binding(0)
 var t_diffuse: texture_2d<f32>;
 @group(0) @binding(1)
 var s_diffuse: sampler;
+@group(0) @binding(2)
+var t_normal: texture_2d<f32>;
+@group(0) @binding(3)
+var s_normal: sampler;
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-	return textureSample(t_diffuse, s_diffuse, in.tex_coords);
+
+	let object_color: vec4<f32> = textureSample(t_diffuse, s_diffuse, in.tex_coords);
+	let object_normal: vec4<f32> = textureSample(t_normal, s_normal, in.tex_coords);
+
+	// we don't want or need much ambient light, so 0.1 is fine
+	let ambient_strength = 0.1;
+	let ambient_color = light.color * ambient_strength;
+
+	// create the lighting vectors
+	let tanget_normal = object_normal.xyz * 2.0 - 1.0;
+	let light_dir = normalize(light.position - in.world_position);
+	let view_dir = normalize(camera.view_pos.xyz - in.world_position);
+	let half_dir = normalize(view_dir + light_dir);
+
+	let diffuse_strength = max(dot(tanget_normal, light_dir), 0.0);
+	let diffuse_color = light.color * diffuse_strength;
+
+	let specular_strength = pow(max(dot(tanget_normal, half_dir), 0.0), 32.0);
+	let specular_color = specular_strength * light.color;
+
+	let result = (ambient_color + diffuse_color + specular_color) * object_color.xyz;
+
+	return vec4<f32>(result, object_color.a);
 }

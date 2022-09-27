@@ -90,7 +90,8 @@ pub async fn load_model(
     let mut materials = Vec::new();
     for m in obj_materials? {
         let diffuse_texture = load_texture(&m.diffuse_texture, device, queue).await?;
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let normal_texture = load_texture(&m.normal_texture, device, queue).await?;
+        /*let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
             layout,
             entries: &[
@@ -103,13 +104,15 @@ pub async fn load_model(
                     resource: wgpu::BindingResource::Sampler(&diffuse_texture.sampler),
                 },
             ],
-        });
+        });*/
 
-        materials.push(model::Material {
-            name: m.name,
+        materials.push(model::Material::new( 
+            device,
+            &m.name,
             diffuse_texture,
-            bind_group,
-        });
+            normal_texture,
+            layout,
+        ));
     }
 
     let meshes = models
