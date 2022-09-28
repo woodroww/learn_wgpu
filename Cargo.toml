@@ -19,6 +19,7 @@ bytemuck = { version = "1.12.1", features = ["derive"] }
 cgmath = "0.18.0"
 anyhow = "1.0.65"
 tobj = { version = "3.2.3", features = ["async"] }
+instant = "0.1.12"
 
 [build-dependencies]
 anyhow = "1.0.65"
