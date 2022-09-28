@@ -11,6 +11,8 @@ pub struct ModelVertex {
     pub position: [f32; 3],
     pub tex_coords: [f32; 2],
     pub normal: [f32; 3],
+    pub tangent: [f32; 3],
+    pub bitangent: [f32; 3],
 }
 
 impl Vertex for ModelVertex {
@@ -33,6 +35,16 @@ impl Vertex for ModelVertex {
                 wgpu::VertexAttribute {
                     offset: mem::size_of::<[f32; 5]>() as wgpu::BufferAddress,
                     shader_location: 2,
+                    format: wgpu::VertexFormat::Float32x3,
+                },
+                wgpu::VertexAttribute {
+                    offset: mem::size_of::<[f32; 8]>() as wgpu::BufferAddress,
+                    shader_location: 3,
+                    format: wgpu::VertexFormat::Float32x3,
+                },
+                wgpu::VertexAttribute {
+                    offset: mem::size_of::<[f32; 11]>() as wgpu::BufferAddress,
+                    shader_location: 4,
                     format: wgpu::VertexFormat::Float32x3,
                 },
             ],
@@ -132,6 +144,15 @@ pub trait DrawModel<'a> {
         camera_bind_group: &'a wgpu::BindGroup,
         light_bind_group: &'a wgpu::BindGroup,
     );
+
+    fn draw_model_instanced_with_material(
+        &mut self,
+        model: &'a Model,
+        material: &'a Material,
+        instances: Range<u32>,
+        camera_bind_group: &'a wgpu::BindGroup,
+        light_bind_group: &'a wgpu::BindGroup,
+    );
 }
 
 impl<'a, 'b> DrawModel<'b> for wgpu::RenderPass<'a>
@@ -182,6 +203,20 @@ where
     ) {
         for mesh in &model.meshes {
             let material = &model.materials[mesh.material];
+            self.draw_mesh_instanced(mesh, material, instances.clone(), camera_bind_group, light_bind_group);
+        }
+    }
+
+
+    fn draw_model_instanced_with_material(
+        &mut self,
+        model: &'a Model,
+        material: &'a Material,
+        instances: Range<u32>,
+        camera_bind_group: &'a wgpu::BindGroup,
+        light_bind_group: &'a wgpu::BindGroup,
+    ) {
+        for mesh in &model.meshes {
             self.draw_mesh_instanced(mesh, material, instances.clone(), camera_bind_group, light_bind_group);
         }
     }
