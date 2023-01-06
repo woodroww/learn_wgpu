@@ -43,7 +43,7 @@ pub async fn load_binary(file_name: &str) -> anyhow::Result<Vec<u8>> {
                 .await?
                 .bytes()
                 .await?
-                to_vec();
+                .to_vec();
         } else {
             let path = std::path::Path::new(env!("OUT_DIR"))
                 .join("res")
