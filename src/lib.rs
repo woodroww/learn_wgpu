@@ -1,7 +1,7 @@
+mod camera;
 mod model;
 mod resources;
 mod texture;
-mod camera;
 
 use cgmath::prelude::*;
 use cgmath::SquareMatrix;
@@ -9,6 +9,8 @@ use model::Vertex;
 use tracing::{error, info, warn};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
+use wgpu::Adapter;
+use wgpu::Features;
 use wgpu::{include_wgsl, util::DeviceExt};
 use winit::dpi::PhysicalPosition;
 use winit::{
@@ -81,13 +83,14 @@ impl model::Vertex for InstanceRaw {
             attributes: &[
                 wgpu::VertexAttribute {
                     offset: 0,
-                    // While our vertex shader only uses locations 0, and 1 now, in later tutorials we'll
-                    // be using 2, 3, and 4, for Vertex. We'll start at slot 5 not conflict with them later
+                    // While our vertex shader only uses locations 0, and 1 now, in later tutorials
+                    // we'll be using 2, 3, and 4, for Vertex. We'll start at slot 5 not conflict
+                    // with them later
                     shader_location: 5,
                     format: wgpu::VertexFormat::Float32x4,
                 },
-                // A mat4 takes up 4 vertex slots as it is technically 4 vec4s. We need to define a slot
-                // for each vec4. We'll have to reassemble the mat4 in the shader.
+                // A mat4 takes up 4 vertex slots as it is technically 4 vec4s. We need to define a
+                // slot for each vec4. We'll have to reassemble the mat4 in the shader.
                 wgpu::VertexAttribute {
                     offset: mem::size_of::<[f32; 4]>() as wgpu::BufferAddress,
                     shader_location: 6,
@@ -223,9 +226,27 @@ impl State {
         let size = window.inner_size();
 
         // The instance is a handle to our GPU
+        // The instance is the first thing you create when using wgpu. Its main purpose is to
+        // create Adapters and Surfaces.
         // Backends::all => Vulkan + Metal + DX12 + Browser WebGPU
         let instance = wgpu::Instance::new(wgpu::Backends::all());
+
         let surface = unsafe { instance.create_surface(window) };
+
+        // For information purposes, print out available_adapters that support our surface
+        let available_adapters: Vec<Adapter> = instance
+            .enumerate_adapters(wgpu::Backends::all())
+            .filter(|adapter| {
+                // Check if this adapter supports our surface
+                adapter.is_surface_supported(&surface)
+            })
+            .collect();
+        for adapter in available_adapters {
+            info!("available_adapter: {:?}", adapter);
+        }
+
+        // The adapter is a handle for our actual graphics card. You can use this to get
+        // information about the graphics card, such as its name and what backend the adapter uses.
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::default(),
@@ -234,6 +255,14 @@ impl State {
             })
             .await
             .unwrap();
+
+        // How to check for certain features
+        // https://docs.rs/wgpu/latest/wgpu/struct.Features.html
+        let features = adapter.features();
+        info!("adapter available features {:?}", features);
+        // How to check for a specific feature
+        //let timestamp_query = features.contains(Features::TIMESTAMP_QUERY);
+
         let (device, queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
@@ -252,10 +281,8 @@ impl State {
             .await
             .unwrap();
 
-        // list available features for your device
-        // https://docs.rs/wgpu/latest/wgpu/struct.Features.html
-        //dbg!(adapter.features());
-        //dbg!(device.features());
+        let features = device.features();
+        info!("device available features {:?}", features);
 
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
@@ -311,7 +338,8 @@ impl State {
             });
 
         let camera = camera::Camera::new((0.0, 5.0, 10.0), cgmath::Deg(-90.0), cgmath::Deg(-20.0));
-        let projection = camera::Projection::new(config.width, config.height, cgmath::Deg(45.0), 0.1, 100.0);
+        let projection =
+            camera::Projection::new(config.width, config.height, cgmath::Deg(45.0), 0.1, 100.0);
         let camera_controller = camera::CameraController::new(4.0, 0.4);
 
         let mut camera_uniform = CameraUniform::new();
@@ -493,7 +521,12 @@ impl State {
     }
 
     fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
-        if new_size.width > 0 && new_size.height > 0 {
+        // sometimes winit is sending u32::MAX as the new_size
+        if new_size.width > 0
+            && new_size.width < 8192
+            && new_size.height > 0
+            && new_size.height < 8192
+        {
             self.projection.resize(new_size.width, new_size.height);
             self.size = new_size;
             self.config.width = new_size.width;
@@ -534,7 +567,8 @@ impl State {
 
     fn update(&mut self, dt: instant::Duration) {
         self.camera_controller.update_camera(&mut self.camera, dt);
-        self.camera_uniform.update_view_proj(&self.camera, &self.projection);
+        self.camera_uniform
+            .update_view_proj(&self.camera, &self.projection);
         self.queue.write_buffer(
             &self.camera_buffer,
             0,
@@ -543,10 +577,11 @@ impl State {
 
         // Update the light
         let old_position: cgmath::Vector3<_> = self.light_uniform.position.into();
-        self.light_uniform.position =
-            (cgmath::Quaternion::from_axis_angle((0.0, 1.0, 0.0).into(), cgmath::Deg(60.0 * dt.as_secs_f32()))
-                * old_position)
-                .into();
+        self.light_uniform.position = (cgmath::Quaternion::from_axis_angle(
+            (0.0, 1.0, 0.0).into(),
+            cgmath::Deg(60.0 * dt.as_secs_f32()),
+        ) * old_position)
+            .into();
         self.queue.write_buffer(
             &self.light_buffer,
             0,
@@ -662,35 +697,35 @@ pub async fn run() {
         *control_flow = ControlFlow::Poll;
         match event {
             Event::DeviceEvent {
-                event: DeviceEvent::MouseMotion { delta, },
+                event: DeviceEvent::MouseMotion { delta },
                 ..
-            } => if state.mouse_pressed {
-                state.camera_controller.process_mouse(delta.0, delta.1)
+            } => {
+                if state.mouse_pressed {
+                    state.camera_controller.process_mouse(delta.0, delta.1)
+                }
             }
             Event::WindowEvent {
                 window_id,
                 ref event,
-            } if window_id == window.id() && !state.input(event) => {
-                match event {
-                    WindowEvent::CloseRequested
-                    | WindowEvent::KeyboardInput {
-                        input:
-                            KeyboardInput {
-                                state: ElementState::Pressed,
-                                virtual_keycode: Some(VirtualKeyCode::Escape),
-                                ..
-                            },
-                        ..
-                    } => *control_flow = ControlFlow::Exit,
-                    WindowEvent::Resized(physical_size) => {
-                        state.resize(*physical_size);
-                    }
-                    WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
-                        state.resize(**new_inner_size);
-                    }
-                    _ => {}
+            } if window_id == window.id() && !state.input(event) => match event {
+                WindowEvent::CloseRequested
+                | WindowEvent::KeyboardInput {
+                    input:
+                        KeyboardInput {
+                            state: ElementState::Pressed,
+                            virtual_keycode: Some(VirtualKeyCode::Escape),
+                            ..
+                        },
+                    ..
+                } => *control_flow = ControlFlow::Exit,
+                WindowEvent::Resized(physical_size) => {
+                    state.resize(*physical_size);
                 }
-            }
+                WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
+                    state.resize(**new_inner_size);
+                }
+                _ => {}
+            },
             Event::RedrawRequested(window_id) if window_id == window.id() => {
                 let now = instant::Instant::now();
                 let dt = now - last_render_time;
@@ -713,4 +748,3 @@ pub async fn run() {
         }
     });
 }
-
